@@ -1,0 +1,281 @@
+---
+title: "Basic Linear Regression for Explanation of House Prices"
+output:
+  html_document:
+    df_print: paged
+---
+<style>
+#question {
+  color: blue
+}
+#answer {
+  color: brown
+}
+</style>
+
+# Question: What factors explain differences in the house pricing?
+
+Carry out linear regression for explanation based on the house prices data set based on a single variable, up to finding the regression summaries, and answer the interpretation questions posed in between.
+
+# House price versus house age
+
+Let us try to explain the differences in house unit *price* (outcome variable y) as a function of one numerical variable: the *age* of the house (explanatory variable x).
+
+```{r}
+library(tidyverse)
+library(moderndive)
+library(skimr)
+library(lubridate)
+
+weather_summary = read.csv('Summary-of-Weather.csv') %>%
+  mutate(Date = as_date(Date),
+         Precip = if_else(Precip == "T", 0, as.double(Precip)))
+
+weather_stations = read.csv('Weather-Station-Locations.csv') %>%
+  mutate(STATE.COUNTRY.ID = as.factor(STATE.COUNTRY.ID))
+
+weather_combined <- inner_join(weather_summary, weather_stations, by = c("STA" = "WBAN"))
+```
+
+## 1. Exploratory Data Analysis
+
+### (i) Examine the raw data values
+
+```{r, eval=TRUE, include=TRUE}
+weather_combined %>% sample(size = 5)
+```
+
+### (ii) Compute summary statistics
+
+```{r}
+
+weather_combined %>% 
+  select(ELEV, Precip) %>%
+  skim()
+```
+
+### (iii) Create data visualizations
+
+Since both the score and bty_avg variables are numerical, create a *scatterplot*.
+
+```{r}
+weather_combined %>% 
+  ggplot(aes(ELEV, Precip)) + 
+  geom_point()
+
+```
+
+<p id="question"> Does jittering reveal additional information? Why/why not?"</p>
+
+```{r}
+weather_combined %>% 
+  ggplot(aes(ELEV, Precip)) + 
+  geom_jitter()
+```
+
+<p id="answer">Jittering does not reveal any significant information. </p>
+
+Next, we add the *regression line*.
+
+```{r}
+weather_combined %>% 
+  ggplot(aes(ELEV, Precip)) + 
+  geom_point() +  
+  geom_smooth(method = "lm", se = FALSE)
+
+```
+
+<p id="question"> What can you infer from the regression line? </p>
+<p id="answer"> From the regression line we can see that the trend is relatively flat, but slightly rising because the line goes in an upwards trajectory. That means that with increasing of the elevation the precipitation also slightly goes up. </p>
+
+
+## 2. Simple Linear Regression
+
+In this step, we compute the linear regression coefficients.
+
+<p id="question"> What is the equation of the best-fitting line? </p>
+
+```{r}
+model <- lm(Precip~ELEV, data = weather_combined)
+model %>% get_regression_table()
+
+```
+
+<p id="answer">  $\widehat{price} = 3.010	 + 0.001	 . house.age$</p>
+
+<p id="question"> How would you interpret $b_1$? </p>
+<p id="answer"> The B1 represents the slope of the line chart. Here it means that when the elevation increases by 1 unit the precipitation increases by 0.001.</p>
+
+<p id="question"> How would you interpret $b_0$? </p>
+<p id="answer"> For this B0 it means that when the record is taken from elevation 0 (sea level), the precipitation should be around 3.010mm.</p>
+
+```{r}
+
+```
+
+## 3. Residual analysis
+
+### (i) Find information on individual observations
+
+```{r}
+regression_points <- model %>% get_regression_points()
+regression_points
+
+```
+
+<p id="question"> Check the fitted values when elevation = 0. </p>
+
+```{r}
+regression_points %>%  filter(ELEV == 0)
+```
+
+<p id="answer"> An interesting find is that there are no records with elevation 0. This would mean that all of the records taken are from above see level. With that information we can conclude that there are almost certanly no records from the Netherlands, as there are multiple points where the elevation of the Netherlands in below see level.  </p>
+
+### (ii) Compute sum of squared residuals
+
+<p id="question"> What does the RSS denote? </p>
+
+```{r}
+regression_points %>%
+  mutate(squared_residuals = residual^2) %>%
+  summarize(sum_of_squared_residuals = sum(squared_residuals))
+```
+
+<p id="answer">  The RSS is sitting at 13795721, which is quite a high number. This would mean that the data fits the model relatively poorly, based on this variable.</p>
+
+### (iii) Compute regression summaries
+
+```{r}
+
+model %>% get_regression_summaries()
+```
+
+<p id="question"> What is the value of $R^2$ and what does it denote? </p>
+<p id="answer">  In this case R squared is sitting at 0.007(7%). This is a low score and this means that that the data does not fit well with the model that we have created.</p>
+
+# Precip versus Latitude
+
+
+## 1. Exploratory Data Analysis
+
+### (i) Examine the raw data values
+
+```{r, eval=TRUE, include=TRUE}
+
+realEstate %>% glimpse()
+
+weather_combined %>% sample(size = 5)
+```
+
+### (ii) Compute summary statistics
+
+Try to get some summary statistics. We could use either dplyr or the skimr package for the univariate statistics.
+
+```{r}
+
+weather_combined %>% 
+  select(Latitude, Precip) %>%
+  skim()
+```
+
+### (iii) Create data visualizations
+
+Since both the score and bty_avg variables are numerical, create a *scatterplot*.
+
+```{r}
+weather_combined %>% 
+  ggplot(aes(Latitude,Precip)) + 
+  geom_point()
+```
+
+<p id="question"> Does jittering reveal additional information? Why/why not?"</p>
+
+```{r}
+weather_combined %>% 
+  ggplot(aes(Latitude,Precip)) + 
+  geom_jitter()
+```
+
+<p id="answer">The jittering does not reveal any trend in this case. </p>
+
+Next, we add the *regression line*.
+
+```{r}
+weather_combined %>% 
+  ggplot(aes(Latitude,Precip)) + 
+  geom_jitter() +  
+  geom_smooth(method = "lm", se = FALSE)
+
+```
+
+<p id="question"> What can you infer from the regression line? </p>
+<p id="answer"> From the regression line we can see that the trend is almost flat, but slightly decreasing as the line moves downwards. This means that with increasing Latitude the precipitation goes down. </p>
+
+
+## 2. Simple Linear Regression
+
+In this step, we compute the linear regression coefficients.
+
+<p id="question"> What is the equation of the best-fitting line? </p>
+
+We use the moderndive package to answer this question.
+
+```{r}
+
+model2 <- lm(Precip~Latitude, data = weather_combined)
+model2 %>% get_regression_table()
+
+```
+
+<p id="answer">  $\widehat{price} = 27.181 - 0.056 . number.of.convenience.stores$</p>
+
+<p id="question"> How would you interpret $b_1 = -0.056$? </p>
+<p id="answer"> B1 is the slope of the line graph. That means that when the Latitude goes up by 1 unit the precipitation decreases by 0.056 </p>
+
+<p id="question"> How would you interpret $b_0 = 4.209$? </p>
+<p id="answer"> In this case it would mean that when the Latitude is at 0(The record is from the equator) the precipitation is at around 4.209mm.</p>
+
+```{r}
+```
+
+## 3. Residual analysis
+
+### (i) Find information on individual observations
+
+```{r}
+regression_points2 <- model2 %>% get_regression_points()
+regression_points2
+
+```
+
+<p id="question"> Check the fitted values when Latitude = 0(The record is from the equator). </p>
+
+```{r}
+regression_points2 %>%  filter(Latitude == 0)
+```
+
+<p id="answer"> There are no values with latitude 0 which would mean that there are no weather station records exactly from the equator.</p>
+
+### (ii) Compute sum of squared residuals
+
+<p id="question"> What does the RSS denote? </p>
+
+```{r}
+regression_points2 %>%
+  mutate(squared_residuals = residual^2) %>%
+  summarize(sum_of_squared_residuals = sum(squared_residuals))
+```
+
+<p id="answer">  The RSS is sitting at 13741532, which is quite a high number. This would mean that the data fits the model relatively poorly.</p>
+
+### (iii) Compute regression summaries
+
+Use the get_regression_summaries function of moderndive.
+
+```{r}
+
+model2 %>% get_regression_summaries()
+```
+
+<p id="question"> What is the value of $R^2$ and what does it denote? </p>
+<p id="answer">  The value of the R squared is 11% here, which is relatively low and this would suggest that the model does not fit well.</p>

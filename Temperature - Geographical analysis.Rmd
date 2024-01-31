@@ -1,0 +1,257 @@
+---
+title: "Temperature - Geographical analysis - Basic Linear Regression"
+output:
+  html_document:
+    df_print: paged
+---
+<style>
+#question {
+  color: blue
+}
+#answer {
+  color: brown
+}
+</style>
+
+# Question: What factors explain differences in the house pricing?
+
+Carry out linear regression for explanation based on the house prices data set based on a single variable, up to finding the regression summaries, and answer the interpretation questions posed in between.
+
+# House price versus house age
+
+Let us try to explain the differences in house unit *price* (outcome variable y) as a function of one numerical variable: the *age* of the house (explanatory variable x).
+
+```{r}
+library(tidyverse)
+library(moderndive)
+library(skimr)
+library(lubridate)
+
+weather_summary = read.csv('Summary-of-Weather.csv') %>%
+  mutate(Date = as_date(Date),
+         MeanTemp = if_else(MeanTemp == "T", 0, as.double(MeanTemp)))
+
+weather_stations = read.csv('Weather-Station-Locations.csv') %>%
+  mutate(STATE.COUNTRY.ID = as.factor(STATE.COUNTRY.ID))
+
+weather_combined <- inner_join(weather_summary, weather_stations, by = c("STA" = "WBAN"))
+```
+
+## 1. Exploratory Data Analysis
+
+### (ii) Compute summary statistics
+
+```{r}
+
+weather_combined %>% 
+  select(ELEV, MeanTemp) %>%
+  skim()
+```
+
+### (iii) Create data visualizations
+
+Since both the Elevation and MeanTemp variables are numerical, create a we create a *scatterplot*.
+
+```{r}
+weather_combined %>% 
+  ggplot(aes(ELEV, MeanTemp)) + 
+  geom_point()
+
+```
+
+<p id="question"> Does jittering reveal additional information? Why/why not?"</p>
+
+```{r}
+weather_combined %>% 
+  ggplot(aes(ELEV, MeanTemp)) + 
+  geom_jitter()
+```
+
+<p id="answer">Jittering does not reveal any significant information. </p>
+
+Next, we add the *regression line*.
+
+```{r}
+weather_combined %>% 
+  ggplot(aes(ELEV, MeanTemp)) + 
+  geom_point() +  
+  geom_smooth(method = "lm", se = FALSE)
+
+```
+
+<p id="question"> What can you infer from the regression line? </p>
+<p id="answer"> From the regression line we can see that the trend is relatively flat, but slightly rising because the line goes in an upwards trajectory. That means that with increasing of the elevation the average temperature(MeanTemp) also slightly goes up. Which is an interesting find, as common scene would suggest the opposite.</p>
+
+
+## 2. Simple Linear Regression
+
+In this step, we compute the linear regression coefficients.
+
+<p id="question"> What is the equation of the best-fitting line? </p>
+
+```{r}
+model3 <- lm(MeanTemp~ELEV, data = weather_combined)
+model3 %>% get_regression_table()
+
+```
+
+<p id="answer">  $\widehat{price} = 22.314	 + 0.000	 . ELEV$</p>
+
+<p id="question"> How would you interpret $b_1$? </p>
+<p id="answer"> The B1 represents the slope of the line chart. Here it means that when the elevation increases by 1 unit the average temperature(MeanTemp), increases by 0.000. This suggests that based on the dataset we can conclude that elevation does not effect the average temperature.</p>
+
+<p id="question"> How would you interpret $b_0$? </p>
+<p id="answer"> For this B0 it means that when the record is taken from elevation 0 (sea level), the average temperature(MeanTemp), should be around 22.314 degrees Celsius.</p>
+
+
+## 3. Residual analysis
+
+### (i) Find information on individual observations
+
+```{r}
+regression_points3 <- model3 %>% get_regression_points()
+regression_points3
+
+```
+
+<p id="question"> Check the fitted values when elevation = 0. </p>
+
+```{r}
+regression_points3 %>%  filter(ELEV == 0)
+```
+
+<p id="answer"> An interesting find is that there are no records with elevation 0. This would mean that all of the records taken are from above see level. With that information we can conclude that there are almost certainly no records from the Netherlands, as there are multiple points where the elevation of the Netherlands in below see level.  </p>
+
+### (ii) Compute sum of squared residuals
+
+<p id="question"> What does the RSS denote? </p>
+
+```{r}
+regression_points3 %>%
+  mutate(squared_residuals = residual^2) %>%
+  summarize(sum_of_squared_residuals = sum(squared_residuals))
+```
+
+<p id="answer">  The RSS is sitting at 8177897, which is quite a high number. This would mean that the data fits the model relatively poorly, based on this variable.</p>
+
+### (iii) Compute regression summaries
+
+```{r}
+
+model3 %>% get_regression_summaries()
+```
+
+<p id="question"> What is the value of $R^2$ and what does it denote? </p>
+<p id="answer">  In this case R squared is sitting at 0.002(2%). This is a low score and this would suggest that that the data does not fit well with the model that we have created, based on this variable.</p>
+
+# MeanTemp versus Latitude
+
+
+## 1. Exploratory Data Analysis
+
+### (ii) Compute summary statistics
+
+```{r}
+
+weather_combined %>% 
+  select(Latitude, MeanTemp) %>%
+  skim()
+```
+
+### (iii) Create data visualizations
+
+Since both the Latitude and MeanTemp variables are numerical, create a we create a *scatterplot*.
+
+```{r}
+weather_combined %>% 
+  ggplot(aes(Latitude,MeanTemp)) + 
+  geom_point()
+```
+
+<p id="question"> Does jittering reveal additional information? Why/why not?"</p>
+
+```{r}
+weather_combined %>% 
+  ggplot(aes(Latitude,MeanTemp)) + 
+  geom_jitter()
+```
+
+<p id="answer">The jittering does not reveal any trend in this case. </p>
+
+Next, we add the *regression line*.
+
+```{r}
+weather_combined %>% 
+  ggplot(aes(Latitude,MeanTemp)) + 
+  geom_jitter() +  
+  geom_smooth(method = "lm", se = FALSE)
+
+```
+
+<p id="question"> What can you infer from the regression line? </p>
+<p id="answer"> From the regression line we can see that the trend is decreasing as the line moves steadily downwards. This means that with increasing Latitude the average temperature(MeanTemp) goes down. Which also matches the logical understanding that we would have in geography.</p>
+
+
+## 2. Simple Linear Regression
+
+In this step, we compute the linear regression coefficients.
+
+<p id="question"> What is the equation of the best-fitting line? </p>
+
+We use the moderndive package to answer this question.
+
+```{r}
+
+model4 <- lm(MeanTemp~Latitude, data = weather_combined)
+model4 %>% get_regression_table()
+
+```
+
+<p id="answer">  $\widehat{price} = 26.558 - 0.236 . Latitude$</p>
+
+<p id="question"> How would you interpret $b_1 = -0.236$? </p>
+<p id="answer"> B1 is the slope of the line graph. That means that when the Latitude goes up by 1 unit the average temperature(MeanTemp) decreases by 0.236 </p>
+
+<p id="question"> How would you interpret $b_0 = 26.558$? </p>
+<p id="answer"> In this case it would mean that when the Latitude is at 0(The record is from the equator) the average temperature(MeanTemp) is at around 26.558 degrees Celsius</p>
+
+## 3. Residual analysis
+
+### (i) Find information on individual observations
+
+```{r}
+regression_points4 <- model4 %>% get_regression_points()
+regression_points4
+
+```
+
+<p id="question"> Check the fitted values when Latitude = 0(The record is from the equator). </p>
+
+```{r}
+regression_points4 %>%  filter(Latitude == 0)
+```
+
+<p id="answer"> There are no values with latitude 0 which would mean that there are no weather station records exactly from the equator, which is a logical conclusion, as building a weather station at lattitude 0 will be challenging.</p>
+
+### (ii) Compute sum of squared residuals
+
+<p id="question"> What does the RSS denote? </p>
+
+```{r}
+regression_points4 %>%
+  mutate(squared_residuals = residual^2) %>%
+  summarize(sum_of_squared_residuals = sum(squared_residuals))
+```
+
+<p id="answer">  The RSS is sitting at 5602678, which is quite a high number. This would suggest that the data fits the model relatively poorly, based on this variable.</p>
+
+### (iii) Compute regression summaries
+
+
+```{r}
+
+model4 %>% get_regression_summaries()
+```
+
+<p id="question"> What is the value of $R^2$ and what does it denote? </p>
+<p id="answer">  The value of the R squared is 31.6% here, which is relatively high and this would suggest that the model fits relatively well.</p>

@@ -1,0 +1,1158 @@
+---
+title: "Statistics project"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+<style>
+#question {
+  color: blue
+}
+#answer {
+  color: brown
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(moderndive)
+library(skimr)
+library(lubridate)
+library(flexdashboard)
+library(XML)
+library(vembedr)
+```
+
+```{r include=FALSE}
+weather_summary = read.csv('Summary-of-Weather.csv') %>%
+  mutate(Date = as_date(Date),
+         Precip = if_else(Precip == "T", 0, as.double(Precip)))
+
+weather_stations = read.csv('Weather-Station-Locations.csv') %>%
+  mutate(STATE.COUNTRY.ID = as.factor(STATE.COUNTRY.ID), 
+         climate_zone = case_when(abs(Latitude) >= 0 & abs(Latitude) <= 23.5 ~ "tropical",
+                                  abs(Latitude) > 23.5 & abs(Latitude) <= 40 ~ "subtropical",
+                                  abs(Latitude) > 40 & abs(Latitude) <= 60 ~ "temperate",
+                                  abs(Latitude) > 60 & abs(Latitude) <= 90 ~ "polar and subpolar"))
+
+weather_combined <- inner_join(weather_summary, weather_stations, by = c("STA" = "WBAN"))
+
+naval_casualties <- readHTMLTable('okinawa_alied_naval_casualties.html', header = T, which = 1) 
+naval_casualties <- naval_casualties %>%
+  mutate(Date = dmy(naval_casualties$Day), 
+         Killed = as.numeric(naval_casualties$Killed),
+         Wounded = as.numeric(naval_casualties$Wounded)) %>%
+         group_by(Date) %>%
+         summarise(total_casualties = sum(Killed + Wounded))
+
+weather_philipines <- weather_combined %>% filter(STA == 41207)
+
+casualties_weather <- inner_join(weather_philipines, naval_casualties, by = c("Date" = "Date")) %>%
+  mutate(rain_level = case_when(Precip >= mean(Precip) ~ "Above average",
+                                Precip <= mean(Precip) ~ "Below average")) %>%
+  select(Date, Precip, MinTemp, MaxTemp, MeanTemp, ELEV, Latitude, Longitude, total_casualties, rain_level) %>%
+  complete(Date = seq.Date(min(Date), max(Date), by="day"))  %>% 
+  fill(Precip, MinTemp, MaxTemp, MeanTemp, ELEV, Latitude, Longitude, rain_level) %>%
+  mutate(total_casualties = replace_na(total_casualties, 0))
+```
+
+About the project
+=====================================
+
+Column
+-----------------------------------------------------------------------
+<center>
+![](okinawa_wallpaper.jpg){#id .class width=1000px}
+
+<h1 style = "color: #2780e3; font-weight: bold;">The Impact of Geography on the Battle of Okinawa: A Statistical Analysis</h1>
+<br>
+<h2 style = "font-weight: bold;">About the project</h2>
+<hr>
+<p>This dashboard is an geographic statistical analysis of a dataset about the weather during WWII and also a historical statistical analysis of the Battle of Okinawa and how different weather factors have affected the number of casualties. The analysis is split into 3 different parts parts. The first one focuses on giving a statistical geographical analysis on the precipitation during WWII and how it was affected by the elevation of the recorded station and by the latitude. The second part focuses on giving a statistical geographical analysis of the average temperature of the different locations based on their elevation and latitude. Finally the third part focuses on giving a statistical overview of the Battle of Okinawa, the one of the most crucial moments during the pacific theater of WWII and how the daily casualties have been effected by the two geographical  variables that were explored in the previous two sections, the precipitation and the average temperature.</p>
+<br>
+<h2 style = "font-weight: bold;">The goal of the project</h2>
+<hr>
+<p>The goal of this project is to analyze the geographical variables from the weather dataset and see if they have truly effected the casualties during the battle and this also possibly the outcome of it. If so this will hopefully prove that geography has had an impact on this major historical event and will confirm that there has been a clear connection between geography and history in this event.</p>
+<br>
+</center>
+Precipitation - Geographical analysis
+=====================================
+Column {.tabset data-width=600}
+-----------------------------------------------------------------------
+### Precipitation versus elevation
+
+Introduction
+The purpose of this analysis is to examine if there is a relationship between the precipitation and the elevation in the dataset and thus give an overview of the geographical factor.
+
+
+Research questions
+
+Main research question - Main research question: What is the relationship between precipitation and elevation, during the second world war?
+
+Sub-questions: 
+
+1) Is there a significant correlation between elevation and precipitation?
+
+2) How does the precipitation change with the elevation?
+
+3) Are there any specific elevations at which the rate of precipitation changes?
+<br>
+<br>
+<hr>
+
+1. Exploratory Data Analysis
+
+Summary statistics
+
+```{r echo=FALSE}
+
+weather_combined %>% 
+  select(ELEV, Precip) %>%
+  skim()
+```
+
+
+Data visualizations
+
+In order to have any meaningful graph here we have to scale the log to 10. As the relationship does not really prove to be linear for this dataset.
+
+<p id="question"> What can you infer from the regression line? </p>
+<p id="answer"> From the regression line we can see that the trend is relatively flat, but slightly rising because the line goes in an upwards trajectory. That means that with increasing of the elevation the precipitation also slightly goes up. </p>
+
+2. Simple Linear Regression
+
+In this step, we compute the linear regression coefficients.
+
+<p id="question"> What is the equation of the best-fitting line? </p>
+
+```{r echo=FALSE}
+model <- lm(Precip~ELEV, data = weather_combined)
+model %>% get_regression_table()
+
+```
+
+<p id="answer">  $\widehat{Precip} = 3.010	 + 0.001	 .ELEV$</p>
+
+<p id="question"> How would you interpret $b_1$? </p>
+<p id="answer"> The B1 represents the slope of the line chart. Here it means that when the elevation increases by 1 unit the precipitation increases by 0.001.</p>
+
+<p id="question"> How would you interpret $b_0$? </p>
+<p id="answer"> For this B0 it means that when the record is taken from elevation 0 (sea level), the precipitation should be around 3.010mm.</p>
+
+
+3. Residual analysis
+
+(1) **L**inearity of relationship
+
+<p id="answer"> The scatterplot reveals that the points are almost not scattered and there is only slight linearity.</p>
+
+(2) **I**ndependence of the residuals
+
+```{r echo=FALSE}
+weather_combined %>% 
+  group_by(STA, Date) %>%
+  summarise(n())
+```
+
+<p id="answer"> It appears that the observations are independent.</p>
+
+<p id="question"> Are the residuals independent of one another?</p>
+
+<p id="answer"> From the lag plot we see that the residuals don't form a diagonal, this would imply that they are not independent.</p>
+
+(3) **N**ormality of the residuals
+
+<p id="answer"> This histogram shows that there are more negative residuals than positive Our regression model tends to overestimate. The residuals exhibit a positive skew.</p>
+
+(4) **E**quality of variance of the residuals
+
+<p id="question"> What can be inferred about the spread of the residuals from the above plot? </p>
+<p id="answer"> Around the line at y = 0, the residuals spread, but not evenly across all values of the x variable. The errors appear to be *quite Heteroscedastic*.</p>
+
+
+Sum of squared residuals
+
+<p id="question"> What does the RSS denote? </p>
+
+```{r echo=FALSE}
+model %>% 
+  get_regression_points() %>%
+  mutate(squared_residuals = residual^2) %>%
+  summarize(sum_of_squared_residuals = sum(squared_residuals))
+```
+
+<p id="answer">  The RSS is sitting at 13795721, which is quite a high number. This would mean that the data fits the model relatively poorly.</p>
+
+Regression summaries
+
+```{r echo=FALSE}
+
+model %>% get_regression_summaries()
+```
+
+<p id="question"> What is the value of $R^2$ and what does it denote? </p>
+<p id="answer">  The value of the R squared is 0.007(0.7%) here, which is relatively low and this would suggest that the model does not fit well.</p>
+
+Interpreting the regression table output
+
+<p id="question"> Form a null hypothesis and an alternative hypothesis. </p>
+<p id="answer"> The null hypothesis here $H_0$(the slope is 0), would assume that there is *no true relationship between the elevation and the precipitation*. <br> 
+
+The *alternative hypothesis* $H_A$ assumes that the slope is not 0, which means that as the latitude increases, the precipitation either increases (positive slope) or decreases (negative slope).
+</p>
+
+<p id="question"> Comment on the std_error, statistic, p-value and lower_ci and upper_ci columns of the regression table, *for both the intercept b<sub>0</sub> and the slope for elevation b<sub>1</sub>.* Do you accept or reject the null hypothesis based on these statistics?</p>
+
+<p id="answer"> 
+
+We already know that the estimate column of the above table has the intercept $b_0$ = 3.010 and the slope $b_1$ = 0.001 for elevation. The equation of the regression line is $\widehat{Precip} = 3.010 + 0.001  .ELEV$. For every increase of 1 unit in elevation, there is an associated decrease of, **on average**, 0.001 in the precipitation. <br>
+
+Viewing these n = 119,040 records as a *sample,* we can view our fitted slope b<sub>1</sub> = 0.001 as a *point estimate of the population slope, β<sub>1</sub>.* The β<sub>1</sub> demonstrates the relationship between precipitation and elevation for all the weather records. Furthermore, we can see our fitted intercept b<sub>0</sub> = 3.010 as a *point estimate of the population intercept β<sub>0</sub> for all the weather records*<br>
+
+Standard error - The *std_error*, contains the standard error of the estimates, which ideally will be as close to the 0 as possible. From the table we see that we can expect 0 units of variation in the slope for the Latitude. That is because the point estimate of 0.001 for the fitted slope is just one possible value of the fitted slope resulting from this particular sample of n = 119,040 records.<br>
+
+Test statistic - The *statistic*, corresponds to a standardized t-test statistic relating to the hypothesis test about the slope equaling 0. The observed t-statistic is 28.126.<br>
+
+p-value - The *p_value* of the table, corresponds to the p-value of the above hypothesis test. It tells us how likely it is for the effect we have observed of the latitude on the precipitation. A p-value of 0 suggests that we could reject the null hypothesis in favor of the hypothesis that there *is* a relationship(the alternative hypothesis). In our case we have a p-value of 0 so the null hypothesis can be rejected.<br>
+
+Confidence interval - The *lower_ci* and *upper_ci* correspond to the endpoints of the *95% confidence interval for the slope.* We are 95% confident that the true slope lies in the range (0.000, 0.001).<br>
+</p>
+
+Conclusion
+
+<p id="question"> What is your conclusion about making inferences from linear regression in this particular case? How reliable are the results of our confidence intervals and hypothesis tests? </p>
+
+<p id="answer"> 
+1. Linearity of relationship between variables: Partially Yes
+2. Independence of residuals: Partially Yes
+3. Normality of residuals: No
+4. Equality of variance: No
+<br>
+<br>
+As only two conditions are partially met we can say that the model appears to be quite unreliable, but has the tenancy to underestimate the values. Thus here it would be more applicable to accept the null hypothesis.
+</p>
+
+
+
+### Precipitation versus Latitude
+
+
+Introduction
+The purpose of this analysis is to examine if there is a relationship between the precipitation and the latitude in the dataset and thus give an overview of the geographical factor.
+
+
+Research questions
+
+Main research question - Main research question: How does latitude affect precipitation, during the second world war?
+
+Sub-questions: 
+
+1) Is there a significant correlation between latitude and precipitation?
+
+2) Does the precipitation change as latitude increases or decreases?
+
+3) Are there specific latitudes at which the rate of precipitation changes?
+<br>
+<br>
+<hr>
+
+1. Exploratory Data Analysis
+
+Summary statistics
+
+```{r echo=FALSE}
+
+weather_combined %>% 
+  select(Latitude, Precip) %>%
+  skim()
+```
+
+Data visualizations
+
+<p id="question"> What can you infer from the regression line? </p>
+<p id="answer"> From the regression line we can see that the trend is almost flat, but slightly decreasing as the line moves downwards. This means that with increasing Latitude the precipitation goes down. </p>
+
+2. Simple Linear Regression
+
+In this step, we compute the linear regression coefficients.
+
+<p id="question"> What is the equation of the best-fitting line? </p>
+
+```{r echo=FALSE}
+
+model2 <- lm(Precip~Latitude, data = weather_combined)
+model2 %>% get_regression_table()
+
+```
+
+<p id="answer">  $\widehat{Precip} = 4.209 - 0.056 . Latitude$</p>
+
+<p id="question"> How would you interpret $b_1 = -0.056$? </p>
+<p id="answer"> B1 is the slope of the line graph. That means that when the Latitude goes up by 1 unit the precipitation decreases by 0.056 </p>
+
+<p id="question"> How would you interpret $b_0 = 4.209$? </p>
+<p id="answer"> In this case it would mean that when the Latitude is at 0(The record is from the equator) the precipitation is at around 4.209mm.</p>
+
+
+3. Residual analysis
+
+(1) **L**inearity of relationship
+
+<p id="answer"> The scatterplot reveals that the points are not really scattered and there is only slight linerity.</p>
+
+(2) **I**ndependence of the residuals
+
+```{r echo=FALSE}
+weather_combined %>% 
+  group_by(STA, Date) %>%
+  summarise(n())
+```
+
+<p id="answer"> It appears that the observations are independent.</p>
+
+<p id="question"> Are the residuals independent of one another?</p>
+
+<p id="answer"> From the lag plot we see that the residuals don't form a diagonal, this would imply that they are not independent.</p>
+
+(3) **N**ormality of the residuals
+
+<p id="answer"> This histogram shows that there are more negative residuals than positive Our regression model tends to overestimate. The residuals exhibit a positive skew.</p>
+
+(4) **E**quality of variance of the residuals
+
+<p id="question"> What can be inferred about the spread of the residuals from the above plot? </p>
+<p id="answer"> Around the line at y = 0, the residuals spread, but not evenly across all values of the x variable. The errors appear to be *quite Heteroscedastic*.</p>
+
+
+Sum of squared residuals
+
+<p id="question"> What does the RSS denote? </p>
+
+```{r echo=FALSE}
+model2 %>% 
+  get_regression_points() %>%
+  mutate(squared_residuals = residual^2) %>%
+  summarize(sum_of_squared_residuals = sum(squared_residuals))
+```
+
+<p id="answer">  The RSS is sitting at 13741532, which is quite a high number. This would mean that the data fits the model relatively poorly.</p>
+
+Regression summaries
+
+```{r echo=FALSE}
+
+model2 %>% get_regression_summaries()
+```
+
+<p id="question"> What is the value of $R^2$ and what does it denote? </p>
+<p id="answer">  The value of the R squared is 1.1% here, which is relatively low and this would suggest that the model does not fit well.</p>
+
+Interpreting the regression table output
+
+<p id="question"> Form a null hypothesis and an alternative hypothesis. </p>
+<p id="answer"> The null hypothesis here $H_0$(the slope is 0), would assume that there is *no true relationship between the latitude and the precipitation*. <br> 
+
+The *alternative hypothesis* $H_A$ assumes that the slope is not 0, which means that as the latitude increases, the precipitation either increases (positive slope) or decreases (negative slope).
+</p>
+
+<p id="question"> Comment on the std_error, statistic, p-value and lower_ci and upper_ci columns of the regression table, *for both the intercept b<sub>0</sub> and the slope for latitude b<sub>1</sub>.* Do you accept or reject the null hypothesis based on these statistics?</p>
+
+<p id="answer"> 
+
+We already know that the estimate column of the above table has the intercept $b_0$ = 4.209 and the slope $b_1$ = -0.056 for latitude. The equation of the regression line is $\widehat{Precip} = 4.209 - 0.056 . Latitude$. For every increase of 1 unit in latitude, there is an associated decrease of, **on average**, 0.056 in the precipitation. This also matches the geographical expectations that we have, as the further away we go from the equator the less rain we get.<br>
+
+Viewing these n = 119,040 records as a *sample,* we can view our fitted slope b<sub>1</sub> = - 0.056 as a *point estimate of the population slope, β<sub>1</sub>.* The β<sub>1</sub> demonstrates the relationship between precipitation and Latitude for all the weather records. Furthermore, we can see our fitted intercept b<sub>0</sub> = 4.209 as a *point estimate of the population intercept β<sub>0</sub> for all the weather records*<br>
+
+Standard error - The *std_error*, contains the standard error of the estimates, which ideally will be as close to the 0 as possible. From the table we see that we can expect 0.002 units of variation in the slope for the Latitude. That is because the point estimate of -0.056 for the fitted slope is just one possible value of the fitted slope resulting from this particular sample of n = 119,040 records.<br>
+
+Test statistic - The *statistic*, corresponds to a standardized t-test statistic relating to the hypothesis test about the slope equaling 0. The observed t-statistic is -35.546.<br>
+
+p-value - The *p_value* of the table, corresponds to the p-value of the above hypothesis test. It tells us how likely it is for the effect we have observed of the latitude on the precipitation. A p-value of 0 suggests that we could reject the null hypothesis in favor of the hypothesis that there *is* a relationship(the alternative hypothesis). In our case we have a p-value of 0 so the null hypothesis can be rejected.<br>
+
+Confidence interval - The *lower_ci* and *upper_ci* correspond to the endpoints of the *95% confidence interval for the slope.* We are 95% confident that the true slope lies in the range (-0.059, -0.053).<br>
+</p>
+
+Conclusion
+
+<p id="question"> What is your conclusion about making inferences from linear regression in this particular case? How reliable are the results of our confidence intervals and hypothesis tests? </p>
+
+<p id="answer"> 
+1. Linearity of relationship between variables: Partially Yes
+2. Independence of residuals: Partially Yes
+3. Normality of residuals: No
+4. Equality of variance: No
+<br>
+<br>
+As only two conditions are partially met we can say that the model appears to be quite unreliable, but has the tenancy to underestimate the values. Thus here it would be more applicable to accept the null hypothesis.
+</p>
+
+
+
+
+Column {.tabset data-width=400}
+-----------------------------------------------------------------------
+###  Precipitation versus elevation - Regression
+
+```{r echo=FALSE}
+weather_combined %>% 
+  ggplot(aes(ELEV, Precip)) + 
+  geom_point() +  
+  geom_smooth(method = "lm", se = FALSE, color = "red") + 
+  scale_x_log10()
+```
+
+###  Precipitation versus lattitude - Regression
+
+```{r echo=FALSE}
+weather_combined %>% 
+  ggplot(aes(Latitude,Precip)) + 
+  geom_jitter() +  
+  geom_smooth(method = "lm", se = FALSE, color = "blue")
+
+```
+
+
+### Precipitation versus elevation - Lag plot
+```{r echo=FALSE}
+model %>% 
+  get_regression_points() %>% 
+  ggplot(aes(x = residual, y = lag(residual))) +
+  geom_point(color = "red") +
+  labs(x = "Residual", y = "Previous residual")
+```
+
+
+### Precipitation versus Latitude - Lag plot
+```{r echo=FALSE}
+model2 %>% 
+  get_regression_points() %>% 
+  ggplot(aes(x = residual, y = lag(residual))) +
+  geom_point(color = "blue") +
+  labs(x = "Residual", y = "Previous residual")
+```
+
+
+### Precipitation versus elevation - Normality plot
+```{r echo=FALSE}
+model %>% 
+  get_regression_points() %>% 
+  ggplot(aes(x = residual)) +
+  geom_histogram(binwidth = 25, fill = "red") +
+  labs(x = "Residual")
+```
+
+
+### Precipitation versus Latitude - Normality plot
+```{r echo=FALSE}
+model2 %>% 
+  get_regression_points() %>% 
+  ggplot(aes(x = residual)) +
+  geom_histogram(binwidth = 25, fill = "blue") +
+  labs(x = "Residual")
+```
+
+
+### Precipitation versus elevation - Equality plot
+```{r echo=FALSE}
+model %>% 
+  get_regression_points() %>% 
+  ggplot(aes(x = ELEV, y = residual)) +
+  geom_point() +
+  labs(x = "elevation", y = "Residual") +
+  geom_hline(yintercept = 0, col = "red", size = 1)+ 
+  scale_x_log10()
+```
+
+
+### Precipitation versus Latitude - Equality plot
+```{r echo=FALSE}
+model2 %>% 
+  get_regression_points() %>% 
+  ggplot(aes(x = Latitude, y = residual)) +
+  geom_point() +
+  labs(x = "Latitude", y = "Residual") +
+  geom_hline(yintercept = 0, col = "blue", size = 1)
+```
+
+
+Average temperature - Geographical analysis
+=====================================
+Column {.tabset data-width=600}
+-----------------------------------------------------------------------
+### MeanTemp versus elevation
+
+Introduction
+The purpose of this analysis is to examine if there is a relationship between the mean temperature and the elevation in the dataset and thus give an overview of the geographical factor.
+
+
+Research questions
+
+Main research question - Main research question: What is the relationship between mean temperature and elevation , during the second world war?
+
+Sub-questions: 
+
+1) Is there a significant difference in average temperature at different elevations?
+
+2) Does the temperature change as elevation increases?
+
+3) Are there any specific elevations at which the temperature changes?
+<br>
+<br>
+<hr>
+
+1. Exploratory Data Analysis
+
+Summary statistics
+
+```{r echo=FALSE}
+
+weather_combined %>% 
+  select(ELEV, MeanTemp) %>%
+  skim()
+```
+
+Data visualizations
+
+<p id="question"> What can you infer from the regression line? </p>
+<p id="answer"> From the regression line we can see that the trend is relatively flat, but slightly rising because the line goes in an upwards trajectory. That means that with increasing of the elevation the average temperature(MeanTemp) also slightly goes up. Which is an interesting find, as common scene would suggest the opposite.</p>
+
+
+2. Simple Linear Regression
+
+In this step, we compute the linear regression coefficients.
+
+<p id="question"> What is the equation of the best-fitting line? </p>
+
+```{r echo=FALSE}
+model3 <- lm(MeanTemp~ELEV, data = weather_combined)
+model3 %>% get_regression_table()
+
+```
+
+<p id="answer">  $\widehat{MeanTemp} = 22.314	 + 0.000	 . ELEV$</p>
+
+<p id="question"> How would you interpret $b_1$? </p>
+<p id="answer"> The B1 represents the slope of the line chart. Here it means that when the elevation increases by 1 unit the average temperature(MeanTemp), increases by 0.000. This suggests that based on the dataset we can conclude that elevation does not effect the average temperature.</p>
+
+<p id="question"> How would you interpret $b_0$? </p>
+<p id="answer"> For this B0 it means that when the record is taken from elevation 0 (sea level), the average temperature(MeanTemp), should be around 22.314 degrees Celsius.</p>
+
+
+3. Residual analysis
+
+(1) **L**inearity of relationship
+
+<p id="answer"> The scatterplot reveals that the points are not really scattered around the regression line and are based in the left end of the graph. It appears that there is no Linearity</p>
+
+(2) **I**ndependence of the residuals
+
+```{r echo=FALSE}
+weather_combined %>% 
+  group_by(STA, Date) %>%
+  summarise(n())
+```
+
+<p id="answer"> It appears that the observations are independent.</p>
+
+<p id="question"> Are the residuals independent of one another?</p>
+
+<p id="answer"> From the lag plot It can be seen that the residuals form a diagonal, which would imply that they are independent on one another.</p>
+
+(3) **N**ormality of the residuals
+
+<p id="answer"> This histogram shows that there are more positive residuals than negative Our regression model tends to overestimate. The residuals exhibit a negative skew.</p>
+
+(4) **E**quality of variance of the residuals
+
+<p id="question"> What can be inferred about the spread of the residuals from the above plot? </p>
+<p id="answer"> Around the line at y = 0, the residuals are not spread across all values of the x variable. The errors appear to be *quite Heteroscedastic*.</p>
+
+Sum of squared residuals
+
+<p id="question"> What does the RSS denote? </p>
+
+```{r echo=FALSE}
+model3 %>% 
+  get_regression_points() %>%
+  mutate(squared_residuals = residual^2) %>%
+  summarize(sum_of_squared_residuals = sum(squared_residuals))
+```
+
+<p id="answer">  The RSS is sitting at 8177897, which is quite a high number. This would mean that the data fits the model relatively poorly, based on this variable.</p>
+
+Regression summaries
+
+```{r echo=FALSE}
+
+model3 %>% get_regression_summaries()
+```
+
+<p id="question"> What is the value of $R^2$ and what does it denote? </p>
+<p id="answer">  In this case R squared is sitting at 0.002(0.2%). This is an extremely low score that the data does not fit the model.</p>
+
+Interpreting the regression table output
+
+<p id="question"> Form a null hypothesis and an alternative hypothesis. </p>
+<p id="answer"> The null hypothesis here $H_0$(the slope is 0), would assume that there is *no true relationship between the elevation and the average temperature*. <br> 
+
+The *alternative hypothesis* $H_A$ assumes that the slope is not 0, which means that as the elevation increases, the average temperature either increases (positive slope) or decreases (negative slope).
+</p>
+
+<p id="question"> Comment on the std_error, statistic, p-value and lower_ci and upper_ci columns of the regression table, *for both the intercept b<sub>0</sub> and the slope for elevation b<sub>1</sub>.* Do you accept or reject the null hypothesis based on these statistics?</p>
+
+<p id="answer"> 
+
+We already know that the estimate column of the above table has the intercept $b_0$ = 22.314 and the slope $b_1$ = 0 for elevation. The equation of the regression line is $\widehat{MeanTemp} = 22.314 - 0 . ELEV$. For every increase of 1 unit in elevation, there is an associated decrease of, **on average**, 0 in the temperature. This suggests that the null hypothesis is correct and there is no relationship between the variables.<br>
+
+Viewing these n = 119,040 records as a *sample,* we can view our fitted slope b<sub>1</sub> = 0 as a *point estimate of the population slope, β<sub>1</sub>.* The β<sub>1</sub> demonstrates the relationship between average temperature and elevation for all the weather records. Furthermore, we can see our fitted intercept b<sub>0</sub> = 22.314 as a *point estimate of the population intercept β<sub>0</sub> for all the weather records*<br>
+
+Standard error - The *std_error*, contains the standard error of the estimates, which ideally will be as close to the 0 as possible. From the table we see that we can expect 0.000 units of variation in the slope for the Latitude. That is because the point estimate of 0 for the fitted slope is 0 and there is no change in the fitted slope resulting from this particular sample of n = 119,040 records.<br>
+
+Test statistic - The *statistic*, corresponds to a standardized t-test statistic relating to the hypothesis test about the slope equaling 0. The observed t-statistic is 16.504<br>
+
+p-value - The *p_value* of the table, corresponds to the p-value of the above hypothesis test. It tells us how likely it is for the effect we have observed of the elevation on the average temperature. A p-value of 0 suggests that we could reject the null hypothesis in favor of the hypothesis that there *is* a relationship(the alternative hypothesis). In our case we have a p-value of 0 so the null hypothesis can be rejected.<br>
+
+Confidence interval - The *lower_ci* and *upper_ci* correspond to the endpoints of the *95% confidence interval for the slope.* We are 95% confident that the true slope lies in the range (0,0).<br>
+</p>
+
+Conclusion
+
+<p id="question"> What is your conclusion about making inferences from linear regression in this particular case? How reliable are the results of our confidence intervals and hypothesis tests? </p>
+
+<p id="answer"> 
+1. Linearity of relationship between variables: No
+2. Independence of residuals: Yes
+3. Normality of residuals: No
+4. Equality of variance: No
+<br>
+<br>
+As three of the conditions are not met we can say that the model appears to be unreliable, tends to overestimate and most certainly the null hypothesis is true and there is no relation ship between the elevation and the average temperature from the observed records.
+</p>
+
+
+
+
+
+### MeanTemp versus Latitude
+
+
+Introduction
+The purpose of this analysis is to examine if there is a relationship between the mean temperature and the latitude in the dataset and thus give an overview of the geographical factor.
+
+
+Research questions
+
+Main research question - Main research question: What is the relationship between mean temperature and latitude, during the second world war?
+
+Sub-questions: 
+
+1) Is there a significant difference in average temperature at different latitudes?
+
+2) Does the temperature change as latitudes changes?
+
+3) Are there any specific latitudes at which the temperature changes?
+<br>
+<br>
+<hr>
+
+1. Exploratory Data Analysis
+
+Summary statistics
+
+```{r echo=FALSE}
+weather_combined %>% 
+  select(Latitude, MeanTemp) %>%
+  skim()
+```
+
+Data visualizations
+
+<p id="answer"> From the regression line we can see that the trend is decreasing as the line moves steadily downwards. This means that with increasing Latitude the average temperature(MeanTemp) goes down. Which also matches the logical understanding that we would have in geography.</p>
+
+2. Simple Linear Regression
+
+In this step, we compute the linear regression coefficients.
+
+```{r echo=FALSE}
+
+model4 <- lm(MeanTemp~Latitude, data = weather_combined)
+model4 %>% get_regression_table()
+
+```
+
+<p id="answer">  $\widehat{MeanTemp} = 26.558 - 0.236 . Latitude$</p>
+
+<p id="answer"> B1 is the slope of the line graph. That means that when the Latitude goes up by 1 unit the average temperature(MeanTemp) decreases by 0.236 </p>
+
+<p id="answer"> In this case it would mean that when the Latitude is at 0(The record is from the equator) the average temperature(MeanTemp) is at around 26.558 degrees Celsius</p>
+
+3. Residual analysis
+
+(1) **L**inearity of relationship
+
+<p id="answer"> The scatterplot reveals that the points are sort of scattered about the regression line. They are following the line but are not really scattered but are forming different lines for every temperature recording. Never the less the trend that is occurring followed appears to be linear. </p>
+
+(2) **I**ndependence of the residuals
+
+```{r echo=FALSE}
+weather_combined %>% 
+  group_by(STA, Date) %>%
+  summarise(n())
+```
+
+<p id="answer"> It appears that the observations are independent.</p>
+
+<p id="question"> Are the residuals independent of one another?</p>
+
+<p id="answer"> From the lag plot It can be seen that the residuals form a diagonal, which would imply that they are independent on one another.</p>
+
+(3) **N**ormality of the residuals
+
+<p id="answer"> This histogram shows that there are more positive residuals than negative Our regression model tends to overestimate. The residuals exhibit a negative skew.</p>
+
+(4) **E**quality of variance of the residuals
+
+<p id="question"> What can be inferred about the spread of the residuals from the above plot? </p>
+<p id="answer"> Around the line at y = 0, the residuals are spread almost constantly across all values of the x variable. The errors appear to be *quite Homoscedastic*.</p>
+
+
+Sum of squared residuals
+
+<p id="question"> What does the RSS denote? </p>
+
+```{r echo=FALSE}
+model4 %>% 
+  get_regression_points() %>%
+  mutate(squared_residuals = residual^2) %>%
+  summarize(sum_of_squared_residuals = sum(squared_residuals))
+```
+
+<p id="answer">  The RSS is sitting at 5602678, which is quite a high number. This would suggest that the data fits the model relatively poorly, based on this variable.</p>
+
+Regression summaries
+
+```{r echo=FALSE}
+model4 %>% get_regression_summaries()
+```
+
+
+<p id="question"> What is the value of $R^2$ and what does it denote? </p>
+<p id="answer">  In this case R squared is sitting at 0.316(31.6%). This is a high score and this suggests that the data fits well with the model.</p>
+
+Interpreting the regression table output
+
+<p id="question"> Form a null hypothesis and an alternative hypothesis. </p>
+<p id="answer"> The null hypothesis here $H_0$(the slope is 0), would assume that there is *no true relationship between the latitude and the average temperature*. <br> 
+
+The *alternative hypothesis* $H_A$ assumes that the slope is not 0, which means that as the latitude increases, the temperature either increases (positive slope) or decreases (negative slope).
+</p>
+
+<p id="question"> Comment on the std_error, statistic, p-value and lower_ci and upper_ci columns of the regression table, *for both the intercept b<sub>0</sub> and the slope for Latitude b<sub>1</sub>.* Do you accept or reject the null hypothesis based on these statistics?</p>
+
+<p id="answer"> 
+
+We already know that the estimate column of the above table has the intercept $b_0$ = 26.558 and the slope $b_1$ = -0.236 for latitude. The equation of the regression line is $\widehat{MeanTemp} = 26.558 - 0.236 . Latitude$. For every increase of 1 unit in latitude., there is an associated decrease of, **on average**, 0.236 in the temperature. This also matches the geographical expectations that we have, as the further away we go from the equator the colder it gets.<br>
+
+Viewing these n = 119,040 records as a *sample,* we can view our fitted slope b<sub>1</sub> = - 0.236 as a *point estimate of the population slope, β<sub>1</sub>.* The β<sub>1</sub> demonstrates the relationship between average temperature and Latitude for all the weather records. Furthermore, we can see our fitted intercept b<sub>0</sub> = 26.558 as a *point estimate of the population intercept β<sub>0</sub> for all the weather records*<br>
+
+Standard error - The *std_error*, contains the standard error of the estimates, which ideally will be as close to the 0 as possible. From the table we see that we can expect 0.001 units of variation in the slope for the Latitude. That is because the point estimate of -0.236 for the fitted slope is just one possible value of the fitted slope resulting from this particular sample of n = 119,040 records.<br>
+
+Test statistic - The *statistic*, corresponds to a standardized t-test statistic relating to the hypothesis test about the slope equaling 0. The observed t-statistic is -234.760.<br>
+
+p-value - The *p_value* of the table, corresponds to the p-value of the above hypothesis test. It tells us how likely it is for the effect we have observed of the house.age on the house.price. A p-value of 0 suggests that we could reject the null hypothesis in favor of the hypothesis that there *is* a relationship(the alternative hypothesis). In our case we have a p-value of 0 so the null hypothesis can be rejected.<br>
+
+Confidence interval - The *lower_ci* and *upper_ci* correspond to the endpoints of the *95% confidence interval for the slope.* We are 95% confident that the true slope lies in the range (-0.238, -0.234).<br>
+</p>
+
+Conclusion
+
+<p id="question"> What is your conclusion about making inferences from linear regression in this particular case? How reliable are the results of our confidence intervals and hypothesis tests? </p>
+
+<p id="answer"> 
+1. Linearity of relationship between variables: Yes
+2. Independence of residuals: Yes
+3. Normality of residuals: No
+4. Equality of variance: Yes
+<br>
+<br>
+As three of the conditions are met we can say that the model appears to be reliable, but has the tenancy to overestimate the values. This shouldn't be a big problem for this analysis.
+</p>
+
+
+Column {.tabset data-width=400}
+-----------------------------------------------------------------------
+###  MeanTemp versus elevation - Regression
+
+```{r echo=FALSE}
+weather_combined %>% 
+  ggplot(aes(ELEV, MeanTemp)) + 
+  geom_point() +  
+  geom_smooth(method = "lm", se = FALSE, color = "red")
+
+```
+
+###  MeanTemp versus lattitude - Regression
+
+```{r echo=FALSE}
+weather_combined %>% 
+  ggplot(aes(Latitude, MeanTemp)) + 
+  geom_jitter() +  
+  geom_smooth(method = "lm", se = FALSE, color = "blue")
+
+```
+
+### MeanTemp versus elevation - Lag plot
+```{r echo=FALSE}
+model3 %>% 
+  get_regression_points() %>% 
+  ggplot(aes(x = residual, y = lag(residual))) +
+  geom_point(color = "red") +
+  labs(x = "Residual", y = "Previous residual")
+```
+
+
+### MeanTemp versus Latitude - Lag plot
+```{r echo=FALSE}
+model4 %>% 
+  get_regression_points() %>% 
+  ggplot(aes(x = residual, y = lag(residual))) +
+  geom_point(color = "blue") +
+  labs(x = "Residual", y = "Previous residual")
+```
+
+
+### MeanTemp versus elevation - Normality plot
+```{r echo=FALSE}
+model3 %>% 
+  get_regression_points() %>% 
+  ggplot(aes(x = residual)) +
+  geom_histogram(binwidth = 5, fill = "red") +
+  labs(x = "Residual")
+```
+
+
+### MeanTemp versus Latitude - Normality plot
+```{r echo=FALSE}
+model4 %>% 
+  get_regression_points() %>% 
+  ggplot(aes(x = residual)) +
+  geom_histogram(binwidth = 5, fill = "blue") +
+  labs(x = "Residual")
+```
+
+
+### MeanTemp versus elevation - Equality Variance
+```{r echo=FALSE}
+model3 %>% 
+  get_regression_points() %>% 
+  ggplot(aes(x = ELEV, y = residual)) +
+  geom_point() +
+  labs(x = "elevation", y = "Residual") +
+  geom_hline(yintercept = 0, col = "red", size = 1)
+```
+
+
+### MeanTemp versus Latitude - Equality Variance
+```{r echo=FALSE}
+model4 %>% 
+  get_regression_points() %>% 
+  ggplot(aes(x = Latitude, y = residual)) +
+  geom_point() +
+  labs(x = "Latitude", y = "Residual") +
+  geom_hline(yintercept = 0, col = "blue", size = 1)
+```
+
+
+The battle of Okinawa - Historical analysis
+=====================================
+Column {.tabset data-width=600}
+-----------------------------------------------------------------------
+### The battle of Okinawa - Historical report
+<h1>The Battle of Okinawa</h1>
+  <h2>Background</h2>
+  <p>The Battle of Okinawa, also known as the Okinawa Campaign, was a major battle of World War II in which the United States and its allies fought against the Empire of Japan. It took place on the island of Okinawa in the Pacific Ocean, and was the largest amphibious assault in the Pacific Theater of the war. The battle lasted from April 1 to June 22, 1945, and resulted in a decisive victory for the United States and its allies.</p>
+  <h2>Course of the battle</h2>
+  <p>The battle began with a massive U.S. amphibious assault on April 1, 1945. The U.S. forces, consisting of the 10th Army (a combined force of U.S. Army and Marine Corps units) and the 3rd Fleet, faced heavy resistance from the Japanese defenders, who were well-entrenched and heavily fortified. The fighting was intense and brutal, and the casualties on both sides were high. Despite this, the U.S. forces were able to slowly but surely push the Japanese back, and by the end of May, they had captured the majority of the island.</p>
+  <p>The final stage of the battle took place in the southern part of the island, where the Japanese had concentrated their remaining forces. The fighting here was even more intense, and the U.S. forces suffered heavy casualties as they tried to root out the remaining Japanese defenders. Finally, on June 22, 1945, the U.S. forces declared victory, and the Battle of Okinawa came to an end.</p>
+  <h2>Aftermath</h2>
+  <p>The Battle of Okinawa was a significant victory for the United States and its allies, as it paved the way for the final assault on Japan itself. However, the victory came at a heavy cost, with over 12,000 U.S. soldiers and marines killed and more than 36,000 wounded. The Japanese suffered even heavier casualties, with over 100,000 soldiers and civilians killed and many more wounded. The battle also had a significant impact on the civilian population of Okinawa, as thousands were caught in the crossfire and many more were left homeless and starving after the fighting ended.</p>
+<h2>Short video about the battle</h2>
+```{r echo = FALSE}
+embed_youtube("wl6riOsUJyw")
+```
+
+
+
+### Casualties versus MeanTemp & Precipitation - Statistical analysis
+
+Introduction
+The purpose of this analysis is to examine if there is a relationship between the number of casualties and the MeanTemp & Precipitation from the dataset and thus give an overview of how geographical factors have effected the battle.
+
+
+Research questions
+
+Main research question - Main research question: What is the relationship between casualties and MeanTemp & Precipitation levels during the battle?
+
+Sub-questions: 
+
+1) Is there a significant difference in casualties at different temperatures and Precipitation levels?
+
+2) Do casualties increase or decrease as temperature and Precipitation levels change?
+
+3) Are there any specific conditions at which the casualties are the highest?
+
+
+Assumptions
+As we don't have exact data from the location where the battle happened we use the weather data from the closes available point, which in our case is the Philippines. This still makes the analysis interesting, as this is the location from where the US Navy was launching their attacks targeted at the enemy based in Okinawa. In addition, we don't have data for each day of the attack, so we assume that the weather will be the same as the day before that and we fill the missing data using tidyr.
+<br>
+<br>
+<hr>
+
+1. Exploratory Data Analysis
+
+Summary statistics
+
+```{r echo=FALSE}
+casualties_weather %>% 
+  select(MeanTemp, total_casualties, rain_level) %>%
+  skim()
+```
+
+Data visualizations
+
+<p id="answer"> From the regression line we can see that when the rain is below average trend is decreasing as the line moves sightly downwards. This means that with increasing average temperature the casualties go down. When the rain is above average the casualties go steadily up with the increasing temperature, but the records where this has occurred are relatively few, so we cannot measure this with extreme accuracy. This matches the logic that we would have here as when it is raining and it is warm it is harder to defend from air attacks and most of the casualties in this dataset are from air attacks.</p>
+
+2. Multiple Linear Regression
+
+In this step, we adopt two approaches to multiple regression.
+
+(a) Parallel slopes model
+
+<p id="question"> Visualise the regression lines using the parallel slopes model and find their equations.</p>
+
+
+```{r}
+parallel_model <- lm(data = casualties_weather, total_casualties ~ MeanTemp + rain_level)
+
+parallel_model %>% get_regression_table()
+```
+
+<p id="answer"> 
+'Above average' calculation = $\widehat{casualties} = 74.296 + 0.295	 . MeanTemp$<br> 
+'Below average' calculation = $\widehat{casualties} = (74.296 + 13.357) + 0.295	. MeanTemp$
+</p>
+
+<p id="question"> How would you interpret $b_1$ in this model? </p>
+<p id="answer"> The B1 in this model represents the slope by which the casualties increase or decrease based on the temperature. It is different for each rain category.</p>
+
+<p id="question"> How would you interpret $b_0$ in this model? </p>
+<p id="answer"> The B0 is the average casualties per record. It must be noted that the average is higher when there is rain below the average as there were more times of that occurring</p>
+
+
+(b) Interaction model
+
+```{r}
+interaction_model <- lm(data = casualties_weather, total_casualties ~ MeanTemp * rain_level)
+
+interaction_model %>% get_regression_table()
+```
+
+<p id="answer"> 
+'Above average' calculation = $\widehat{casualties} = -1021.229 + 38.734 . MeanTemp$<br> 
+'Below average' calculation = $\widehat{casualties} = (-1021.229 + 1236.804) + (38.734 - 42.959) . MeanTemp$
+</p>
+
+<p id="question"> How would you interpret $b_1$ in this model? </p>
+<p id="answer"> 
+The B1 here represents how the average number of casualties is effected by the temperature, while also considering the level of rain.<br>
+For the days with 'Above average' rain the B1 is at 38.734, this would mean that with each increase of the temperature the casualties go up by 38.734 on average.<br>
+For the days with 'Below average' rain the B1 is at -4.225. This means that for point in temperature increase the casualties drops by 4.225 on average.<br>
+</p>
+
+<p id="question"> How would you interpret $b_0$ in this model?</p>
+<p id="answer"> 
+The B0 here represents the starting price of a house when it is brand new, while also considering the amount of stores nearby. <br>
+For the days with 'Above average' rain the B0 is -1021.229, this means that on average the casualties were negative overall. This is due to the lack of days with Above average rainfall during the battle.<br>
+For the days with 'Below average' rain the B0 is 215.575, this means that on average there were 215.575 casualties per day.<br>
+</p>
+
+3. Residual analysis
+
+(1) **L**inearity of relationship
+
+<p id="answer"> The scatterplot reveals that the points are sort of scattered about the regression line. They are following the line but are not really scattered and are quite randomly distributed, but are following the trend. Never the less the trend that is occurring followed appears to be slightly linear, but not really. </p>
+
+(2) **I**ndependence of the residuals
+
+```{r echo=FALSE}
+casualties_weather %>% 
+  group_by(Date) %>%
+  summarise(n())
+```
+
+<p id="answer"> It appears that the observations are independent.</p>
+
+<p id="question"> Are the residuals independent of one another?</p>
+
+<p id="answer"> From the lag plot we can see that the points don't form a diagonal. Thus, this would imply that the residuals are most likely dependent.</p>
+
+(3) **N**ormality of the residuals
+
+<p id="answer"> This histogram of the parallel model shows that there are more negative residuals than positive residuals and  our regression model tends to underestimate The residuals exhibit a positive skew.</p>
+
+(4) **E**quality of variance of the residuals
+
+<p id="question"> What can be inferred about the spread of the residuals from the above plot? </p>
+<p id="answer"> From the graph we see that there are some points that are spread over the axis, but it is not evenly spread so it would appear that the errors are *quite Homoscedastic*.</p>
+
+
+Sum of squared residuals
+
+<p id="question"> What does the RSS denote? </p>
+
+```{r echo=FALSE}
+parallel_model %>% 
+  get_regression_points() %>%
+  mutate(squared_residuals = residual^2) %>%
+  summarize(sum_of_squared_residuals = sum(squared_residuals))
+```
+
+<p id="answer">  The RSS of the parallel_model is sitting at 3183620, which is quite a high number. This would suggest that the data fits the model relatively poorly, based on this variable.</p>
+
+<p id="question"> What does the RSS denote? </p>
+
+```{r echo=FALSE}
+interaction_model %>% 
+  get_regression_points() %>%
+  mutate(squared_residuals = residual^2) %>%
+  summarize(sum_of_squared_residuals = sum(squared_residuals))
+```
+
+<p id="answer">  The RSS of the interaction_model is sitting at 3170265, which is quite a high number. This would suggest that the data fits the model relatively poorly, based on this variable.</p>
+
+
+Regression summaries
+
+```{r echo=FALSE}
+parallel_model %>% get_regression_summaries()
+```
+
+
+<p id="question"> What is the value of $R^2$ and what does it denote? </p>
+<p id="answer">  In this case R squared of the parallel model is sitting at 0.001(0.1%). This is a very low score and this suggests that the data does not fit well with the model.</p>
+
+
+```{r echo=FALSE}
+interaction_model %>% get_regression_summaries()
+```
+
+
+<p id="question"> What is the value of $R^2$ and what does it denote? </p>
+<p id="answer">  In this case R squared of the interaction model is sitting at 0.005(0.5%). This is a very low score and this suggests that the data does not fit well with the model.</p>
+
+Interpreting the regression table output
+
+<p id="question"> Form a null hypothesis and an alternative hypothesis. </p>
+<p id="answer"> The null hypothesis here $H_0$(the slope is 0), would assume that there is *no true relationship between the average temperature, the rain level and the casualties*. <br> 
+
+The *alternative hypothesis* $H_A$ assumes that the slope is not 0, which means that as the average temperature increases, the casualties either increases (positive slope) or decreases (negative slope).
+</p>
+
+<p id="question"> Comment on the std_error, statistic, p-value and lower_ci and upper_ci columns of the regression table, *for both the intercept b<sub>0</sub> and the slope for MeanTemp b<sub>1</sub>.* Do you accept or reject the null hypothesis based on these statistics?</p>
+
+<p id="answer"> 
+
+For the parallel model, we already know that the estimate column of the above table has the intercept $b_0$ = 74.296 and the slope $b_1$ = 38.734 for the mean temp for the above average rain level. The equation of the regression line is $\widehat{casualties} = 74.296 + 0.295	 . MeanTemp$. For every increase of 1 unit in MeanTemp, there is an associated increase of, **on average**, 0.295 in the casualties. For the below average the intercept $b_0$ = 87.653 and $b_1$ = 0.295. The equation of the regression line is $\widehat{casualties} = (74.296 + 13.357) + 0.295	. MeanTemp$ thus for every increase of 1 unit in MeanTemp, there is an associated increase of, **on average**, 0.295.<br>
+
+For the interaction model, we know that the estimate column of the above table has the intercept $b_0$ = -1021.229 and the slope $b_1$ = 38.734 for the mean temp for the above average rain level. The equation of the regression line is $\widehat{casualties} = -1021.229 + 38.734 . MeanTemp$. For every increase of 1 unit in MeanTemp, there is an associated increase of, **on average**, 38.734 in the casualties. For the below average the intercept $b_0$ = 215.575 and $b_1$ = -4.225. The equation of the regression line is $\widehat{casualties} = (-1021.229 + 1236.804) + (38.734 - 42.959) . MeanTemp$ thus for every increase of 1 unit in MeanTemp, there is an associated decrease of, **on average**, 4.225.<br>
+
+Viewing these n = 83 records as a *sample,* we can view our fitted slope of the parallel model for the above average rain level b<sub>1</sub> = 0.295 as a *point estimate of the population slope, β<sub>1</sub>.* The β<sub>1</sub> demonstrates the relationship between average temperature and the total casualties for all the weather records. Furthermore, we can see our fitted intercept b<sub>0</sub> = 74.296 as a *point estimate of the population intercept β<sub>0</sub> for all the weather records with rain level above average*<br>
+
+Viewing these n = 83 records as a *sample,* we can view our fitted slope of the parallel model for the below average rain level b<sub>1</sub> = 0.295 as a *point estimate of the population slope, β<sub>1</sub>.* The β<sub>1</sub> demonstrates the relationship between average temperature and the total casualties for all the weather records. Furthermore, we can see our fitted intercept b<sub>0</sub> = 87.653 as a *point estimate of the population intercept β<sub>0</sub> for all the weather records with rain level below average*<br>
+
+Viewing these n = 83 records as a *sample,* we can view our fitted slope of the parallel model for the above average rain level b<sub>1</sub> = 38.734 as a *point estimate of the population slope, β<sub>1</sub>.* The β<sub>1</sub> demonstrates the relationship between average temperature and the total casualties for all the weather records. Furthermore, we can see our fitted intercept b<sub>0</sub> = -1021.229 as a *point estimate of the population intercept β<sub>0</sub> for all the weather records with rain level above average*<br>
+
+Viewing these n = 83 records as a *sample,* we can view our fitted slope of the parallel model for the below average rain level b<sub>1</sub> = -4.225 as a *point estimate of the population slope, β<sub>1</sub>.* The β<sub>1</sub> demonstrates the relationship between average temperature and the total casualties for all the weather records. Furthermore, we can see our fitted intercept b<sub>0</sub> = 215.575 as a *point estimate of the population intercept β<sub>0</sub> for all the weather records with rain level below average*<br>
+
+
+Standard error - The *std_error* , contains the standard error of the estimates, which ideally will be as close to the 0 as possible. From the table for the parallel model we see that for the records with above average rain we can expect 22.753 units of variation in the slope for the MeanTemp. This is an extremely bad score and would mean that the model is totally inapplicable. From the table we see that for the records with above average rain we can expect 51.388 units of variation in the slope for the MeanTemp. This is again an extremely bad score and would mean that the model is totally inapplicable.<br>
+
+
+Standard error - The *std_error* , contains the standard error of the estimates, which ideally will be as close to the 0 as possible. From the table for the interaction model we see that for the records with above average rain we can expect 70.446 units of variation in the slope for the MeanTemp. This is an extremely bad score and would mean that the model is totally inapplicable. From the table we see that for the records with above average rain we can expect 74.472 units of variation in the slope for the MeanTemp. This is again an extremely bad score and would mean that the model is totally inapplicable.<br>
+
+
+Test statistic - The *statistic*, corresponds to a standardized t-test statistic relating to the hypothesis test about the slope equaling 0. The observed t-statistic for the parallel model is 0.034.<br>
+
+Test statistic - The *statistic*, corresponds to a standardized t-test statistic relating to the hypothesis test about the slope equaling 0. The observed t-statistic for the parallel model is 0.133.<br>
+
+p-value - The *p_value* of the table, corresponds to the p-value of the above hypothesis test. It tells us how likely it is for the effect we have observed of the house.age on the house.price. A p-value of 0 suggests that we could reject the null hypothesis in favor of the hypothesis that there *is* a relationship(the alternative hypothesis). In our case we have a p-value from the parallel model of 0.967 which is very close to 1 so this heavily suggests that the null hypothesis is correct and there is no relationship and it should be accepted. In the other model case we have a p-value from the interaction model of 0.94 which is again very close to 1 so this heavily suggests that the null hypothesis is correct and there is no relationship and it should be accepted.<br><br>
+
+
+Confidence interval - The *lower_ci* and *upper_ci* correspond to the endpoints of the *95% confidence interval for the slope.* We are 95% confident that the true slope lies in the range (-44.985, 45.575) in the parallel model for the records with above average rainfall. For the records with below average rainfall from the parallel model the true slope lies in the range(-88.909, 115.623).<br>
+
+For the interaction model we are 95% confident that the true slope lies in the range(-101.485, 178.954) for the records with above average rainfall.For the records with below average rainfall from the interaction model the true slope lies in the range(-191.191, 105.274).
+
+</p>
+
+Conclusion
+
+<p id="question"> What is your conclusion about making inferences from linear regression in this particular case? How reliable are the results of our confidence intervals and hypothesis tests? </p>
+
+<p id="answer"> 
+1. Linearity of relationship between variables: No
+2. Independence of residuals: Yes and No
+3. Normality of residuals: No
+4. Equality of variance: No
+<br>
+<br>
+As none of the conditions are met here the Null hypothesis should be accepted and the conclusion would be that there is no relation ship between the temperature and rainfall and the number of casualties. In order to get an accurate view on the data, It must be noted that Exponential Regression appears to be the way to go rather than performing a multiple linear regression. The results are still not perfect but are at least a bit more readable and more adequate analysis can be done. But to conclude for this analysis the null hypothesis is accepted and there is no relationship between the variables.
+</p>
+
+
+
+
+
+Column {.tabset data-width=400}
+-----------------------------------------------------------------------
+### Casualties versus MeanTemp & Precipitation - Regression
+```{r echo = FALSE}
+casualties_weather %>% 
+  ggplot(aes(MeanTemp, total_casualties, color = rain_level)) + 
+  geom_jitter() +  
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+### Casualties versus MeanTemp & Precipitation - Lag plot
+```{r echo=FALSE}
+parallel_model %>% 
+  get_regression_points() %>% 
+  group_by(rain_level) %>%
+  ggplot(aes(x = residual, y = lag(residual))) +
+  geom_point(color = "green") +
+  labs(x = "Residual", y = "Previous residual")
+```
+
+
+### Casualties versus MeanTemp & Precipitation - Normality histogram
+```{r echo=FALSE}
+parallel_model %>% 
+  get_regression_points() %>% 
+  group_by(rain_level) %>%
+  ggplot(aes(x = residual)) +
+  geom_histogram(binwidth = 100, fill = "green") +
+  labs(x = "Residual")
+```
+
+
+### Casualties versus MeanTemp & Precipitation - Equality Variance
+```{r echo=FALSE}
+parallel_model %>% 
+  get_regression_points() %>% 
+  group_by(rain_level) %>%
+  ggplot(aes(x = MeanTemp, y = residual, color = rain_level)) +
+  geom_point() +
+  labs(x = "MeanTemp", y = "Residual") +
+  geom_hline(yintercept = 0, col = "green", size = 1)
+```
